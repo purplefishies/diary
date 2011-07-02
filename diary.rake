@@ -15,9 +15,15 @@ require 'diary_model'
 #=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 namespace :diary do 
 
+DIR_ENVIRONMENT = ENV["DIARY_DIR"] || "work"
+LOCATION = ENV["LOCATION"] || "work"
+#LOCATION = ""
 
-MAIN_DIRECTORY = ENV["HOME"] + "/Schedule/"
+MAIN_DIRECTORY = ENV["HOME"] + "/Schedule/" + DIR_ENVIRONMENT + "/"
 DBFILE = ENV["HOME"] + "/.notes.db"
+
+
+
 
 def currentDay
   time = Time.new()
@@ -37,6 +43,7 @@ task :updateProject do |t|
 
 end
 
+
 desc "A test"
 task :test do |t|
   puts ENV["DIARY"]
@@ -45,13 +52,12 @@ end
 
 desc "Add Diary Entry"
 task :addDiary do |t|
-#  ActiveSupport::Deprecation.silenced = true
-#  ActiveRecord::Base.establish_connection( :adapter => "sqlite3", :dbfile => ".notes.db" )
   connect()
   if ENV["DIARY"].empty?
     throw Exception.new("Need to have specified DIARY=\"??\"" )
   end
-  c = Category.find(:all, :conditions => ['name like ?','%iary%'] ).first
+#  c = Category.find(:all, :conditions => ['name like ?','%iary%'] ).first
+  c = Category.find(:all, :conditions => ['name like ?',getDiary()] ).first
 
   if !c.nil? && ENV["DIARY"]
     t = Task.new(:entry => ENV["DIARY"] )
@@ -72,10 +78,56 @@ task :addTask, [:task,:dueDate,:expected,:parent] do |t,args|
                             ),
                :start   => Time.now
                )
-  b.category = Category.find(:all, :conditions => ['name = ?',"task"] ).first
+  # b.category = Category.find(:all, :conditions => ['name = ?',"task"] ).first
+  b.category = Category.find(:all, :conditions => ['name = ?',getTask() ] ).first
   b.save
 end
 
+
+desc "Search Diary"
+task :searchDiary, [:query, :flag] do |t,args|
+  args.default( :query => "",
+                :flag  => ""
+                )
+  connect()
+  reg  = Regexp.new( /#{args.query}/ )
+  c = Category.find( :all ) 
+#  getTasks("diary").find_all { |i| i.entry =~ reg }.each { |i|
+#  puts "Foo"
+  getTasks( getDiary() ).find_all { |i| i.entry =~ reg }.each { |i|
+    puts "##" * 3;
+    puts i.entry
+    puts "##" * 3 + "\n\n"
+  }
+end
+
+def getDiary
+  if LOCATION == "work" 
+    return "workdiary"
+  else
+    return "diary"
+  end
+end
+
+def getTask
+  if LOCATION == "work"
+    return "worktask"
+  else
+    return "task"
+  end
+end
+
+
+desc "Delete Last diary entry"
+task :deleteLastDiary do |t|
+#  puts "Going to destroy this entry"
+  connect()
+#  d = getTasks("diary").last
+#  puts d.entry
+  d = getTasks( getDiary() ).last
+
+  d.destroy
+end
 
 desc "List Tasks"
 task :listTasks , [:numlist] do |t, args|
@@ -83,11 +135,13 @@ task :listTasks , [:numlist] do |t, args|
   connect()
   if args.numlist
     connect()
-    c = Category.find(:all, :conditions => ['name = ?',"task"] ).first
-    entries = getTasks().find_all { |i| i.completed.nil? }
+    # c = Category.find(:all, :conditions => ['name = ?',"task"] ).first
+    c = Category.find(:all, :conditions => ['name = ?', getTask() ] ).first
+
+    entries = getTasks( getTask() ).find_all { |i| i.completed.nil? }
     entry = entries.map {|i| "#{i.id}: #{i.entry}" }.join("\n")
   else
-    entries = getTasks().find_all { |i| i.completed.nil? }
+    entries = getTasks( getTask() ).find_all { |i| i.completed.nil? }
     puts "Entries was of length #{entries.length}"
     entry = formatTasks( entries )
   end
@@ -96,7 +150,8 @@ end
 
 def findTask(id)
   connect()
-  c = Category.find(:all, :conditions => ['name = ?',"task"] ).first
+#  c = Category.find(:all, :conditions => ['name = ?',"task"] ).first
+  c = Category.find(:all, :conditions => ['name = ?', getTask()] ).first
   return Task.find(:all, 
                    :conditions => {
                      :category_id => c.id,
@@ -105,35 +160,12 @@ def findTask(id)
                    ).first
 end
 
-def findDiaryEntries()
-  connect()
-  c = Category.find(:all, :conditions => ['name = ?',"diary"] ).first
-#   puts "Founs category #{c}"
-  return Task.find(:all,
-                   :conditions => { 
-                     :category_id => c.id,
-                   }
-                   )
-end
-
 desc "Deletes a task based on number"
 task :deleteTask, [:taskID] do |t,args|
   b = findTask( args.taskID )
 #  puts b.new_to_yaml("")
   b.destroy
 end
-
-desc "Delete last diary entry"
-task :deleteLastDiary do |t|
-  entry = findDiaryEntries().find_all {  |t|
-    t.start >= Date.today.to_time 
-  }.last
-  if !entry.nil?
-    entry.destroy
-  end
-#  puts entry.to_yaml
-end
-
 
 desc "Mark a task as completed"
 task :completeTask, [:taskID] do |t,args|
@@ -152,7 +184,8 @@ task :getTask , [:regex] do |t,args|
     regex = Regexp.new( ENV["REGEX"] )
   end
   connect()
-  c = Category.find(:all, :conditions => ['name = ?',"task"] ).first
+#  c = Category.find(:all, :conditions => ['name = ?',"task"] ).first
+  c = Category.find(:all, :conditions => ['name = ?', getTask() ] ).first
   puts selectTasksMatching( regex ).map { |i| 
     i.new_to_yaml("")
   }
@@ -205,15 +238,21 @@ task :writeTasks do |t|
   connect()
   entry = getYamlFile
   curFile = currentDay()
-  puts "File is #{curFile}"
-  if !File.directory?( curFile.pathmap("%d") )
-    mkdir_p( curFile.pathmap("%d") )
-  end
+  puts "CurFile is #{curFile}"
+  setupCorrectDirectoryForFile( curFile )
   fp = File.open(curFile,"w+")
   fp.write( entry )
   fp.close
   puts `cat #{curFile}`
 end
+
+def setupCorrectDirectoryForFile(file)
+#  puts file.pathmap("%d")
+  if !File.directory?( file.pathmap("%d") )
+    mkdir_p( file.pathmap("%d") )
+  end
+end
+
 
 def formatTasks(tasks)
   retstring = "#\n# Tasks\n#\n"
@@ -232,7 +271,8 @@ def getOnlyTasks
   retstring += "date: #{Date.today.strftime("%m/%d/%Y")}\n"
   retstring += "\n"
   retstring += "tasks: \n"
-  c = Category.find(:all, :conditions => ['name = ?',"task"] ).first
+  # c = Category.find(:all, :conditions => ['name = ?',"task"] ).first
+  c = Category.find(:all, :conditions => ['name = ?', getTask() ] ).first
   Task.find(:all, 
             :conditions => ["category_id == :id",
                              { :id    => c.id }
@@ -254,7 +294,8 @@ def getYamlFile
   retstring = getOnlyTasks
   c = Category.find(:all, :conditions => ['name = ?',"diary"] ).first
   retstring += "\n\njournal:\n"
-  getTasks("diary").find_all { |i|
+  # getTasks("diary").find_all { |i|
+  getTasks( getDiary() ).find_all { |i|
     i.start >= Date.today.to_time and 
     ( i.completed.nil? || i.completed > Date.today.to_time )
   }.each { |j|
@@ -264,8 +305,6 @@ def getYamlFile
     retstring += "    desc:"
 
     if j.entry =~ /\n/ 
-##      retstring += " |\n      #{j.entry}\n"
-#@      tmpstring = " |\n      #{j.entry}\n"
       tmpstring = "      #{j.entry}"
       tmpstring.gsub!(/\n/,"\n      ")
       retstring += " |\n#{tmpstring}\n"
