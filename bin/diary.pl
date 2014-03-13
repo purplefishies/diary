@@ -23,8 +23,6 @@ use Date::Manip qw(/\S+/);
 use YAML qw(Dump);
 #****************************  GLOBAL VARIABLES  ****************************
 
-
-
 my $FILE_LOCATION=$ENV{HOME};
 my $FILE='.notes.db';
 
@@ -34,8 +32,8 @@ my @results;
 my $query;
 my $dbh;
 my $sth;
-
-my $RAKE = "rake -I$ENV{HOME}/.rake ";
+my $RAKE_OPTIONS = "";
+my $RAKE = "rake -I$ENV{HOME}/.rake $RAKE_OPTIONS ";
 
 #**********************************  CODE  **********************************
 #getopts("lnc:f:e:d:t", \%opts);
@@ -53,21 +51,21 @@ GetOptions(\%opts,
            "parent=s",
           );
 if( $opts{list} ) {
-    system("DIARY=\"$ARGV[0]\" ${RAKE} -s diary:writeTasks")
+    system("DIARY=\"$ARGV[0]\" ${RAKE}  -s diary:writeTasks")
 } elsif( $opts{addtask} ) {
     $opts{duedate} = UnixDate($opts{duedate},"%b %d %T %Y");
     $opts{expcomplete} = UnixDate( $opts{expcomplete}, "%b %d %T %Y");
-    system("${RAKE} -s diary:addTask[\"$opts{addtask}\",\"$opts{duedate}\",\"$opts{expcomplete}\",\"$opts{parent}\"]\n");
+    system("${RAKE}  -s diary:addTask[\"$opts{addtask}\",\"$opts{duedate}\",\"$opts{expcomplete}\",\"$opts{parent}\"]\n");
 } elsif( $opts{search} ) {
-    system("${RAKE} -s diary:searchDiary[$opts{search}]");
+    system("${RAKE}  -s diary:searchDiary[$opts{search}]");
 } elsif( $opts{tasksonly} ) {
-    system("${RAKE} -s diary:listTasks")
+    system("${RAKE}  -s diary:listTasks")
 } elsif( defined $opts{delete} && ! $opts{delete} ) {
-    system("${RAKE} -s diary:deleteLastDiary[\"$opts{delete}\"]")
+    system("${RAKE}  -s diary:deleteLastDiary[\"$opts{delete}\"]")
 } elsif( $opts{counttasks} ) {
-    system("${RAKE} -s diary:listTasks[\"true\"]")
+    system("${RAKE}  -s diary:newlistTasks");
 } elsif( $#ARGV == 0 ) {
-    system("DIARY=\"$ARGV[0]\" ${RAKE} -s diary:addDiary")
+    system("DIARY=\"$ARGV[0]\" ${RAKE}  -s diary:addDiary")
 } elsif( $#ARGV < 0 ) {
     usage();
 }
